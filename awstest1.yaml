@@ -1,0 +1,752 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  This template creates an EC2 instance 
+  with Route53 
+  AWS Containter 
+  gr VPC
+  Containter gr 
+  CloudFront CDN 
+  S3 Bucket wp-c.u. 
+  ELB Public subnet
+  PHP app Pr
+  subnet MySQL RDS Master-Slave
+Parameters:
+  KeyName:
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS instances.
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+    ConstraintDescription: Please choose a valid instance type.
+  EnvironmentName:
+    Description: An environment name that is prefixed to resource names
+    Type: String
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.192.0.0/16
+  PublicSubnet1CIDR:
+    Description: >-
+      Please enter the IP range (CIDR notation) for the public subnet in the
+      first Availability Zone
+    Type: String
+    Default: 10.192.10.0/24
+  PublicSubnet2CIDR:
+    Description: >-
+      Please enter the IP range (CIDR notation) for the public subnet in the
+      second Availability Zone
+    Type: String
+    Default: 10.192.11.0/24
+  PrivateSubnet1CIDR:
+    Description: >-
+      Please enter the IP range (CIDR notation) for the private subnet in the
+      first Availability Zone
+    Type: String
+    Default: 10.192.20.0/24
+  PrivateSubnet2CIDR:
+    Description: >-
+      Please enter the IP range (CIDR notation) for the private subnet in the
+      second Availability Zone
+    Type: String
+    Default: 10.192.21.0/24
+  PrivateDBSubnet1CIDR:
+    Description: >-
+      Please enter the IP range (CIDR notation) for the privatedb subnet in the
+      first Availability Zone
+    Type: String
+    Default: 10.192.22.0/24
+  PrivateDBSubnet2CIDR:
+    Description: >-
+      Please enter the IP range (CIDR notation) for the privatedb subnet in the
+      first Availability Zone
+    Type: String
+    Default: 10.192.23.0/24
+  Environment:
+    Type: String
+    Default: Testing
+    AllowedValues:
+      - Production
+      - Development
+      - Testing
+  SSHLocation:
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: Must be a valid IP CIDR range format x.x.x.x/x
+  DNS:
+    Type: String
+    Default: .s3.amazonaws.com
+  AliasTarget:
+    Type: String
+    Default: a1bcde2f3ghij4.cloudfront.net
+  HostedZone:
+    Type: String
+    Default: Z2FDTNDATAQYW2
+  SGNameTag:
+    Type: String
+    MinLength: '5'
+    MaxLength: '30'
+  ServiceName:
+    Type: String
+    Default: bb-backend
+  DBName:
+    Default: wordpressdb
+    Description: The WordPress database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBUser:
+    NoEcho: 'true'
+    Description: The WordPress database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+  DBPassword:
+    NoEcho: 'true'
+    Description: The WordPress database admin account password
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+  DBAllocatedStorage:
+    Default: '5'
+    Description: The size of the database (Gb)
+    Type: Number
+    MinValue: '5'
+    MaxValue: '1024'
+    ConstraintDescription: must be between 5 and 1024Gb.
+Conditions:
+  CreateProdResources: !Equals 
+    - !Ref 'Environment'
+    - Production
+Rules:
+  InstanceType:
+    RuleCondition: !Equals
+      - !Ref 'Environment'
+      - Testing
+    Assertions:
+      - Assert:
+          'Fn::Contains':
+            - - t2.micro
+            - !Ref 'InstanceType'
+          AssertDescription: 'For a Testing environment, the instance Type Must be t2.micro'
+Resources:
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+    DeletionPolicy: Retain
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bdc7516f-fc81-450c-b4fc-df151c281b29
+  BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: #!Join 
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref 'S3Bucket'
+                - /*
+      Bucket: !Ref 'S3Bucket'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bcd8efbb-2fe3-44ce-a17a-af54ec8cf399
+  CFOAIFrontend:
+    Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: CF Origin
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 8dec653c-cccc-4df4-8ed1-f1344ddcdb30
+  CFFrontend:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Origins:
+          - Id: S3Bucket
+            DomainName: #!Join
+              - ''
+              - - !Ref 'S3Bucket'
+                - .s3.amazonaws.com
+            S3OriginConfig:
+              OriginAccessIdentity: #!Join
+                - ''
+                - - origin-access-identity/cloudfront
+                  - !Ref 'CFOAIFrontend'
+        Enabled: 'true'
+        Comment: BB Frontend
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - Delete
+            - Get
+            - Head
+            - Options
+            - Patch
+            - Post
+            - Put
+          TargetOriginId: S3Bucket
+          ForwardedValues:
+            QueryString: 'false'
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https
+        PriceClass: PriceClass_200
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 9b57bb93-0ff1-4bf4-bbcd-9f9e046ddc92
+  TDBackend:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: #!Join
+        - ''
+        - - !Ref 'ServiceName'
+          - !Ref 'S3Bucket'
+          - TDBackend
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      Cpu: 256
+      Memory: 256B
+      ExecutionRoleArn: !Ref 'ExecutionRole'
+      ContainerDefinitions:
+        - Name: !Ref 'ServiceName'
+          Cpu: '10'
+          Essential: 'true'
+          Image: 'httpd:2.4'
+          Memory: '300'
+          PortMappings:
+            - ContainerPort: '300'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          Environment:
+            - Name: DATABASE_HOST
+              Value:
+                - RDSDBMaster
+            - Name: DATABASE_DB
+              Value: !Ref 'DBName'
+            - Name: DATABASE_USER
+              Value: !Ref 'DBUser'
+            - Name: DATABASE_PASSWORD
+              Value: !Ref 'DBPassword'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 5fbc71e6-a8f0-4c3e-bae3-d0f6e0cab17d
+  WebProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref 'ExecutionRole'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: f70a7c2a-7c0d-4988-af53-1ebe869a183b
+  ExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: #!Join
+        - ''
+        - - !Ref 'ServiceName'
+          - 'ExecutionRole'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0b46f11e-47ae-45ee-93a1-fbbb0e166288
+  WebServerGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+        Count: '2'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: '1'
+        MinInstancesInService: '1'
+        PauseTime: PT15M
+        WaitOnResourceSignals: 'true'
+    Properties:
+      AvailabilityZones: !GetAZs ''
+      LaunchConfigurationName: !Ref 'LaunchConfig'
+      MinSize: '2'
+      MaxSize: '4'
+      LoadBalancerName:
+        - !Ref 'ELBNode1'
+        - !Ref 'ELBNode2'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: b756028f-8f82-4749-8c9d-ea64097bae12
+  LaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bf367070-942c-4901-9a4e-04c0cac83c5a
+    Properties:
+      KeyName: !Ref 'KeyName'
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - !FindInMap 
+          - AWSInstanceType2Arch
+          - !Ref 'InstanceType'
+          - Arch
+      InstanceType: !Ref 'InstanceType'
+      SecurityGroup:
+        - !Ref 'Ec2SecurityGroup'
+      IamInstanceProfile: !Ref 'WebProfile'
+      UserData:
+        'Fn::Base64': !Sub >
+          #!/bin/bash -xe
+
+          apt-get install -y aws-cfn-bootstrap
+
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackId} --resource
+          LaunchConfig --configsets full_install --region ${AWS::Region}
+
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource
+          WebServerGroup --region ${AWS::Region}
+  MyJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Name: "MyJobTriggerJob"
+      LogUri: "wikiData"
+      Role: !Ref 'ExecutionRole'
+      Command:
+        Name: "glueetl"
+        ScriptLocation: "s3://cf-templates-p674dmzm3lbr-us-east-1/2022046nxF-awstest1.yaml"
+      DefaultArguments:
+        "--job-bookmark-option": "job-bookmark-enable"
+      MaxRetries: 0
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 51c9d718-238a-46af-8ee9-6c9fd24fad41
+  MyJobTrigger:
+    Type: AWS::Glue::Trigger
+    Properties:
+      Name: "MyJobTrigger"
+      Actions:
+        - JobName: !Ref 'MyJob'
+          Arguments:
+            "--job-bookmark-option": "job-bookmark-enable"
+      Predicate:
+        Conditions:
+          - LogicalOperator: EQUALS
+            JobName: !Ref 'MyJob'
+            State: SUCCEEDED
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 90fe7ff3-4452-46a9-aa46-3e5618049ad0
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: !Ref 'VpcCIDR'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref 'EnvironmentName'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 72489ef2-e41b-498b-ab48-d1139e7bee7e
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Ref 'PublicSubnet1CIDR'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} Public Subnet (AZ1)'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 3f523e55-ec5f-4f2d-a6ac-d5794b9b3972
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Ref 'PublicSubnet2CIDR'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} Public Subnet (AZ2)'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: aec18b8b-9928-4b61-aebd-c8698ec75deb
+  PrivateSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Ref 'PrivateSubnet1CIDR'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} Private Subnet (AZ1)'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d60e1ebe-b215-402d-911b-cf15fb8c9e49
+  PrivateSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Ref 'PrivateSubnet2CIDR'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} Private Subnet (AZ2)'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: aa4afc2f-a3ea-429a-bc6c-cdb5ead316c7
+  ELBNode1:
+    Type: 'AWS::ElasticLoadBalancing::LoadBalancer'
+    Properties:
+      Subnets:
+        - !Ref 'PublicSubnet1'
+      Instances:
+        - !Ref 'Ec2Instance'
+      Listeners:
+        - LoadBalancerPort: '80'
+          InstancePort: '80'
+          Protocol: HTTP
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 354299a0-675e-44d0-8500-067615a0b776
+  ELBNode2:
+    Type: 'AWS::ElasticLoadBalancing::LoadBalancer'
+    Properties:
+      Subnets:
+        - !Ref 'PublicSubnet2'
+      Instances:
+        - !Ref 'Ec2Instance'
+      Listeners:
+        - LoadBalancerPort: '80'
+          InstancePort: '80'
+          Protocol: HTTP
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e7e3a449-21f6-4f63-a9af-63be7f0a1cb5
+  PrivateDBSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select 
+        - 0
+        - !GetAZs ''
+      CidrBlock: !Ref 'PrivateDBSubnet1CIDR'
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} PrivateDB Subnet (AZ1)'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 16598590-e552-4ea2-a99e-a0db86577bb4
+  PrivateDBSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref 'VPC'
+      AvailabilityZone: !Select 
+        - 1
+        - !GetAZs ''
+      CidrBlock: !Ref 'PrivateDBSubnet2CIDR'
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName} PrivateDB Subnet (AZ2)'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ff9c975c-9af3-4d30-99be-b8a2e99ee57e
+  DBSecurityGroup:
+    Type: 'AWS::RDS::DBSecurityGroup'
+    Properties:
+      DBSecurityGroupIngress:
+        Ec2SecurityGroupName:
+          Ref: Ec2SecurityGroup
+      GroupDescription: Frontend Access
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e34d111d-a7c7-4e27-9997-20fd5d773ef0
+  Ec2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH and HTTP via port 22 and 80 (300)
+      SecurityGriupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CirdIP: !Ref 'SSHLocation'
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 300
+          ToPort: 300
+          CidrIp: 0.0.0.0/0
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 578462fb-a335-4c75-aa72-50cecc3cb741
+  Ec2Instance:
+    Type: 'AWS::EC2::Instance'
+    Condition: CreateProdResources
+    Properties:
+      ImageId: !FindInMap 
+        - RegionMap
+        - us-east-1
+        - AMI
+      SecurityGroupId:
+        - !Ref 'Ec2SecurityGroup'
+      NetworkInterfaces:
+        - SubnetId: !Ref 'PrivateSubnet1'
+        - SubnetId: !Ref 'PrivateSubnet2'
+      Resource: #!Join 
+        - !Ref 'S3Bucket'
+        - !Ref 'CFOAIFrontend'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ef77847a-5ed6-4aa2-b8ed-9efaebdf5a6e
+  MountPoint:
+    Type: 'AWS::EC2::VolumeAttachment'
+    Condition: CreateProdResources
+    Properties:
+      InstanceId: !Ref 'Ec2Instance'
+      VolumeId: !Ref 'NewVolume'
+      Device: /dev/sdh
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0424ab46-ddaa-4639-9220-99009d4d76f4
+  NewVolume:
+    Type: 'AWS::EC2::Volume'
+    Condition: CreateProdResources
+    Properties:
+      Size: 8
+      AvailabilityZone:
+        - Ec2Instance
+        - AvailabilityZone
+      InstanceType: !Ref 'InstanceType'
+      PublicSubnet1CIDR: !Ref 'PublicSubnet1CIDR'
+      PublicSubnet2CIDR: !Ref 'PublicSubnet2CIDR'
+      PrivateSubnet1CIDR: !Ref 'PublicSubnet1CIDR'
+      PrivateSubnet2CIDR: !Ref 'PublicSubnet2CIDR'
+      KeyName: !Ref 'KeyName'
+      SecurityGriupId:
+        - Ec2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: Ec2Instance
+      UserData: !Base64 
+        'Fn::Sub': >-
+          apt-get -y update          
+          apt-get -y install httpd          
+          systemctl start httpd 
+          systemctl enable httpd echo"<html><h1>HellowCloudFormation<h1><html>" > /var/www/html/index.html
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 732e320f-449a-4299-8c4f-efe034043392
+  EC2VAR5FK:
+    Type: 'AWS::EC2::VolumeAttachment'
+    Properties:
+      VolumeId: !Ref 'NewVolume'
+      InstanceId: !Ref 'Ec2Instance'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: b0e8d209-8e13-4579-987d-4eee5cf54727
+  RDSDBMaster:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      SourceDBInstanceIdentifier: !Ref 'RDSDBSlave'
+      DBName:
+        Ref: DBName
+      DBSecurityGroup:
+        - !Ref 'DBSecurityGroup'
+      AllocatedStorage: !Ref 'DBAllocatedStorage'
+      StorageType: !Ref 'NewVolume'
+      DBInstanceClass: db.t2.micro
+      Engine: MySQL
+      MasterUsername:
+        Ref: DBUser
+      MasterPassword:
+        Ref: DBPassword
+    DeletionPolicy: Delete
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 6aba33a5-197d-4cc3-b0de-4535ae7cd019
+  RDSDBSlave:
+    Type: 'AWS::RDS::DBInstance'
+    Properties:
+      DBName:
+        Ref: DBName
+      DBSecurityGroup:
+        - !Ref 'DBSecurityGroup'
+      AllocatedStorage: !Ref 'DBAllocatedStorage'
+      StorageType: !Ref 'NewVolume'
+      DBInstanceClass: db.t2.micro
+      Engine: MySQL
+      MasterUsername:
+        Ref: DBUser
+      MasterPassword:
+        Ref: DBPassword
+    DeletionPolicy: Delete
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bfb40fe2-079a-48eb-94a3-1d63b3e2916e
+Mappings:
+  RegionMap:
+    us-east-1:
+      AMI: ami-0e472ba40eb589f49
+  AWSInstanceType2Arch:
+    t2.micro:
+      Arch: HVM64
+Outputs:
+  WebsiteURL:
+    Value: !GetAtt 
+      - 'S3Bucket'
+      - WebsiteURL
+    Description: URL for website hosted on S3
+  S3BucketSecureURL:
+    Value: String 
+      - ''
+      - - 'https://'
+        - !GetAtt 
+          - 'S3Bucket'
+          - 'DNS'
+    Description: Name of S3 bucket to hold website content
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref 'VPC'
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: String 
+      - ','
+      - - !Ref 'PublicSubnet1'
+        - !Ref 'PublicSubnet2'
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: String 
+      - ','
+      - - !Ref 'PrivateSubnet1'
+        - !Ref 'PrivateSubnet2'
+  PublicSubnet1:
+    Description: A reference to the public subnet in the 1st Availability Zone
+    Value: !Ref 'PublicSubnet1'
+  PublicSubnet2:
+    Description: A reference to the public subnet in the 2nd Availability Zone
+    Value: !Ref 'PublicSubnet2'
+  PrivateSubnet1:
+    Description: A reference to the private subnet in the 1st Availability Zone
+    Value: !Ref 'PrivateSubnet1'
+  PrivateSubnet2:
+    Description: A reference to the private subnet in the 2nd Availability Zone
+    Value: !Ref 'PrivateSubnet2'
+  PrivateDBSubnet1:
+    Description: A reference to the privatedb subnet in the 2nd Availability Zone
+    Value: !Ref 'PrivateDBSubnet1'
+  PrivateDBSubnet2:
+    Description: A reference to the privatedb subnet in the 2nd Availability Zone
+    Value: !Ref 'PrivateDBSubnet2'
+  InstanceId:
+    Description: Instance ID
+    Value: !Ref Ec2Instance
+  SecurityGriupId:
+    Description: Id of the security group
+    Value: !Ref 'Ec2SecurityGroup'
+  StackVPC:
+    Description: The ID of the VPC
+    Value: !Ref 'VpcCIDR'
+    Export:
+      Name: !Sub '${AWS::StackName}- VpcCIDR'
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParametrGroup:
+      - Label:
+          Default: Network Configuration
+        Parametrs:
+          - VpcId
+          - SubnetId
+      - Label:
+          Default: Subnet CIDR Blocks
+        Parametrs:
+          - PrivateSubnet1
+          - PrivateSubnet2
+          - PrivateDBSubnet1
+          - PrivateDBSubnet2
+      - Label:
+          Default: Amazon EC2 Configuration
+        Parametrs:
+          - InstanceType
+          - KeyName
+      - Label:
+          Default: Environment
+        Parametrs:
+          - Environment
+      - Label:
+          Default: SSH IP Address
+        Parametrs:
+          - SSHLocation
+      - Label:
+          Default: Secure Group NameTag
+        Parametrs:
+          - SGNameTag
