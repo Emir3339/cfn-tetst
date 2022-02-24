@@ -1,4 +1,3 @@
-
 name: CI-CD-AWS-Elastic
 
 
@@ -22,5 +21,3 @@ jobs:
     steps:
     - name: Print Hello Message 
       run : echo "Hello World from Deploy job"
-
-
