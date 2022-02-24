@@ -14,14 +14,19 @@ on:
 
 
 jobs:
-  my_ci_part: 
+  my_testing: 
     runs-on: ubuntu-latest
 
     steps:
-    - name: Git clone our repo
-      uses: actions/checkout@v2
+    - name: Print Hello Message
+      run : echo "Hello World from Testing job"
 
-    - name: Created ZIP deployment pack 
-      run : zip -r ${{ env.DEPLOY_PACKAGE_NAME }} ./ -x *.git*
+  my_deploy: 
+    runs-on: ubuntu-latest
+    needs  : [my_testing]
+     
+    steps:
+    - name: Print Hello Message 
+      run : echo "Hello World from Deploy job"
 
 
