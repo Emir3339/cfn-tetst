@@ -2,6 +2,9 @@ name: Ci_Cd_Test1
 # Controls when the action will run.
 on:
   # Allows you to run this workflow manually from the Actions tab
+  push: 
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       region:
