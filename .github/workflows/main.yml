@@ -3,7 +3,8 @@
 name: CI-CD-Testing
 
 on:
-  push:
+  workflow_run:
+    workflows: ["my_testing"]
     branches:
       - master
 
