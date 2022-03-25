@@ -13,7 +13,7 @@ Description: >
 Parameters:
   KeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the ECS instances.
-    Type: String
+    Type: AWS::EC2::KeyPair::KeyName
     Default: Ec2Test
   InstanceType:
     Description: EC2 instance type
@@ -136,16 +136,6 @@ Parameters:
     Default: 0.0.0.0/0
     AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
     ConstraintDescription: Must be a valid IP CIDR range format x.x.x.x/x
-  DBInstanceID:
-    Default: mydbinstance
-    Description: My database instance
-    Type: String
-    MinLength: '1'
-    MaxLength: '63'
-    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
-    ConstraintDescription: >-
-      Must begin with a letter and must not end with a hyphen or contain two
-      consecutive hyphens.
   DBName:
     Default: wordpressdb
     Description: The WordPress database name
@@ -196,9 +186,6 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
-      WebsiteConfiguration:
-        ErrorDocument: "error.html"
-        IndexDocument: "index.html"
     Metadata:
       'AWS::CloudFormation::Designer':
         id: bdc7516f-fc81-450c-b4fc-df151c281b29
@@ -224,41 +211,6 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 8dec653c-cccc-4df4-8ed1-f1344ddcdb30
-  TDBackend:
-    Type: 'AWS::ECS::TaskDefinition'
-    Properties:
-      Family:
-        - !Ref 'ServiceName'
-        - !Ref 'MyS3Bucket'
-      NetworkMode: awsvpc
-      RequiresCompatibilities:
-        - FARGATE
-      Cpu: 256
-      Memory: 512
-      ExecutionRoleArn: !Ref ExecutionRole
-      ContainerDefinitions:
-        - Name: !Ref 'ServiceName'
-          Image: 'Image'
-          PortMappings:
-            - ContainerPort: !Ref 'WebPort'
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-region: !Ref 'AWS::Region'
-              awslogs-stream-prefix: ecs
-          Environment:
-            - Name: DATABASE_HOST
-              Value:
-                - !Ref RDSDBMaster
-            - Name: DATABASE_DB
-              Value: !Ref 'DBName'
-            - Name: DATABASE_USER
-              Value: !Ref 'DBUser'
-            - Name: DATABASE_PASSWORD
-              Value: !Ref 'DBPassword'
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 5fbc71e6-a8f0-4c3e-bae3-d0f6e0cab17d
   ExecutionPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -295,29 +247,6 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: f70a7c2a-7c0d-4988-af53-1ebe869a183b
-  WebServerGroup:
-    Type: 'AWS::AutoScaling::AutoScalingGroup'
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT15M
-        Count: '2'
-    UpdatePolicy:
-      AutoScalingRollingUpdate:
-        MaxBatchSize: '1'
-        MinInstancesInService: '1'
-        PauseTime: PT15M
-        WaitOnResourceSignals: 'true'
-    Properties:
-      AvailabilityZones: !GetAZs ''
-      LaunchConfigurationName: !Ref 'LaunchConfig'
-      MinSize: '2'
-      MaxSize: '4'
-      LoadBalancerName:
-        - !Ref 'ELBNode1'
-        - !Ref 'ELBNode2'
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: b756028f-8f82-4749-8c9d-ea64097bae12
   LaunchConfig:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Metadata:
@@ -333,7 +262,7 @@ Resources:
           - !Ref 'InstanceType'
           - Arch
       InstanceType: !Ref 'InstanceType'
-      SecurityGroups: !Ref 'Ec2SecurityGroup'
+      SecurityGroups: [!Ref 'Ec2SecurityGroup']
       IamInstanceProfile: !Ref 'WebProfile'
       UserData:
         'Fn::Base64': !Sub >
@@ -346,6 +275,16 @@ Resources:
 
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackId} --resource
           WebServerGroup --region ${AWS::Region}
+  MyASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      LaunchConfigurationName: !Ref LaunchConfig
+      MinSize: '0'
+      MaxSize: '1'
+      DesiredCapacity: '1'
   MyJob:
     Type: AWS::Glue::Job
     Properties:
@@ -354,7 +293,7 @@ Resources:
       Role: !Ref ExecutionRole
       Command:
         Name: "glueetl"
-        ScriptLocation: "s3://cf-templates-p674dmzm3lbr-us-east-1/2022046nxF-awstest1.yaml"
+        ScriptLocation: "s3://cf-templates-p674dmzm3lbr-ap-northeast-1/2022046nxF-awstest1.yaml"
       DefaultArguments:
         "--job-bookmark-option": "job-bookmark-enable"
       MaxRetries: 0
@@ -386,7 +325,7 @@ Resources:
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Ref 'EnvironmentName'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -395,7 +334,7 @@ Resources:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Ref EnvironmentName
   InternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
@@ -408,11 +347,12 @@ Resources:
       VpcId: !Ref 'VPC'
       AvailabilityZone: !Select 
         - 0
-        - !GetAZs ''
+        - !GetAZs
+          Ref: 'AWS::Region'
       CidrBlock: !Ref 'PublicSubnet1CIDR'
       MapPublicIpOnLaunch: true
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Sub '${EnvironmentName} Public Subnet (AZ1)'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -423,11 +363,12 @@ Resources:
       VpcId: !Ref 'VPC'
       AvailabilityZone: !Select 
         - 1
-        - !GetAZs ''
+        - !GetAZs
+          Ref: 'AWS::Region'
       CidrBlock: !Ref 'PublicSubnet2CIDR'
       MapPublicIpOnLaunch: true
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Sub '${EnvironmentName} Public Subnet (AZ2)'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -436,7 +377,8 @@ Resources:
     Type: 'AWS::ElasticLoadBalancing::LoadBalancer'
     Properties:
       Subnets:
-        - !Ref 'PublicSubnet1'
+        - !Ref 'PrivateSubnet1'
+        - !Ref 'PrivateSubnet2'
       Instances:
         - !Ref 'Ec2Instance'
       Listeners:
@@ -446,31 +388,18 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 354299a0-675e-44d0-8500-067615a0b776
-  ELBNode2:
-    Type: 'AWS::ElasticLoadBalancing::LoadBalancer'
-    Properties:
-      Subnets:
-        - !Ref 'PublicSubnet2'
-      Instances:
-        - !Ref 'Ec2Instance'
-      Listeners:
-        - LoadBalancerPort: '80'
-          InstancePort: '80'
-          Protocol: HTTP
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: e7e3a449-21f6-4f63-a9af-63be7f0a1cb5
   PrivateSubnet1:
     Type: 'AWS::EC2::Subnet'
     Properties:
       VpcId: !Ref 'VPC'
       AvailabilityZone: !Select 
         - 0
-        - !GetAZs ''
+        - !GetAZs
+          Ref: 'AWS::Region'
       CidrBlock: !Ref 'PrivateSubnet1CIDR'
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Sub '${EnvironmentName} Private Subnet (AZ1)'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -481,11 +410,12 @@ Resources:
       VpcId: !Ref 'VPC'
       AvailabilityZone: !Select 
         - 1
-        - !GetAZs ''
+        - !GetAZs
+          Ref: 'AWS::Region'
       CidrBlock: !Ref 'PrivateSubnet2CIDR'
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Sub '${EnvironmentName} Private Subnet (AZ2)'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -496,11 +426,12 @@ Resources:
       VpcId: !Ref 'VPC'
       AvailabilityZone: !Select 
         - 0
-        - !GetAZs ''
+        - !GetAZs
+          Ref: 'AWS::Region'
       CidrBlock: !Ref 'PrivateDBSubnet1CIDR'
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Sub '${EnvironmentName} PrivateDB Subnet (AZ1)'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -511,11 +442,12 @@ Resources:
       VpcId: !Ref 'VPC'
       AvailabilityZone: !Select 
         - 1
-        - !GetAZs ''
+        - !GetAZs
+          Ref: 'AWS::Region'
       CidrBlock: !Ref 'PrivateDBSubnet2CIDR'
       MapPublicIpOnLaunch: false
       Tags:
-        - Key: Name
+        - Key: KeyName
           Value: !Sub '${EnvironmentName} PrivateDB Subnet (AZ2)'
     Metadata:
       'AWS::CloudFormation::Designer':
@@ -523,10 +455,50 @@ Resources:
   DBSubnetGroup:
     Type: 'AWS::RDS::DBSubnetGroup' 
     Properties: 
-      DBSubnetGroupDescription: DBSubnetGroup RDS
+      DBSubnetGroupDescription: DBSubnetGroup RDSDBMaster
       SubnetIds: 
         - Ref: 'PrivateDBSubnet1'
         - Ref: 'PrivateDBSubnet2'
+  #RouteTablePublicSub
+  myRouteTablePublicSubnet1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: KeyName
+          Value: !Ref EnvironmentName
+  myRoutePublicSub1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref myRouteTablePublicSubnet1
+  SubnetRouteTableAssociationPublic:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myRouteTablePublicSubnet1
+      SubnetId: !Ref PublicSubnet1
+  #RouteTablePrivateSub
+  myRouteTablePrivateSubnet1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: KeyName
+          Value: !Ref EnvironmentName
+  myRoutePrivateSub1:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref myRouteTablePrivateSubnet1
+  SubnetRouteTableAssociationPrivate:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref myRouteTablePrivateSubnet1
+      SubnetId: !Ref PrivateSubnet1
   Ec2SecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -549,6 +521,7 @@ Resources:
     Type: 'AWS::EC2::Instance'
     Properties:
       InstanceType: !Ref InstanceType
+      KeyName: !Ref 'KeyName'
       SecurityGroupIds:
         - Ref: 'Ec2SecurityGroup'
       ImageId: !FindInMap 
@@ -559,39 +532,24 @@ Resources:
           - !Ref InstanceType
           - Arch
       SubnetId: !Ref 'PrivateSubnet1'
-      Tags:
-        - Key: Name
-          Value: Ec2Instance
+      UserData:
+        'Fn::Base64': !Sub 
+          - >
+            !/bin/bash
+            sed -i -e 's/localhost/${DBEndPoint}/g' /var/www/html/config.php
+          - DBEndPoint:
+              'Fn::GetAtt':
+                - RDSDBMaster
+                - Endpoint.Address
     Metadata:
       'AWS::CloudFormation::Designer':
         id: ef77847a-5ed6-4aa2-b8ed-9efaebdf5a6e
-  NewVolume:
-    Type: 'AWS::EC2::Volume'
-    Properties:
-      Size: 8
-      Encrypted: true
-      AvailabilityZone: !GetAtt Ec2Instance.AvailabilityZone
-      Tags:
-        - Key: Name
-          Value: Ec2Instance
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 732e320f-449a-4299-8c4f-efe034043392
-  MountPoint:
-    Type: 'AWS::EC2::VolumeAttachment'
-    Properties:
-      InstanceId: !Ref 'Ec2Instance'
-      VolumeId: !Ref 'NewVolume'
-      Device: /dev/sdh
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 0424ab46-ddaa-4639-9220-99009d4d76f4
   RDSDBMaster:
     Type: 'AWS::RDS::DBInstance'
     Properties:
-      SourceDBInstanceIdentifier: !Ref 'RDSDBSlave'
-      StorageType: !Ref 'NewVolume'
       DBName: !Ref DBName
+      VPCSecurityGroups:
+        - !Ref Ec2SecurityGroup
       AllocatedStorage: !Ref 'DBAllocatedStorage'
       Engine: MySQL
       MultiAZ: !Ref MultiAZDatabase
@@ -599,24 +557,16 @@ Resources:
       MasterUsername: !Ref DBUser
       MasterUserPassword: !Ref DBPassword
       DBSubnetGroupName: !Ref DBSubnetGroup
-    DeletionPolicy: Delete
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 6aba33a5-197d-4cc3-b0de-4535ae7cd019
   RDSDBSlave:
     Type: 'AWS::RDS::DBInstance'
     Properties:
-      DBInstanceIdentifier: !Ref 'DBInstanceID'
-      StorageType: !Ref 'NewVolume'
-      DBName: !Ref DBName
+      SourceDBInstanceIdentifier: !Ref 'RDSDBMaster'
       AllocatedStorage: !Ref 'DBAllocatedStorage'
-      Engine: MySQL
       MultiAZ: !Ref MultiAZDatabase
       DBInstanceClass: db.t2.micro
-      MasterUsername: !Ref DBUser
-      MasterUserPassword: !Ref DBPassword
-      DBSubnetGroupName: !Ref DBSubnetGroup
-    DeletionPolicy: Delete
     Metadata:
       'AWS::CloudFormation::Designer':
         id: bfb40fe2-079a-48eb-94a3-1d63b3e2916e
@@ -625,8 +575,11 @@ Mappings:
     t2.micro:
       Arch: HVM64
   AWSRegionArch2AMI:
-    us-east-1:
-      HVM64: ami-0e472ba40eb589f49 
+    ap-northeast-1:
+      HVM64: ami-00bc9b7f0e98dc134 
+  AccountId:
+    ap-northeast-1:
+      AccountId: '444192309605'
 Outputs:
   WebsiteURL:
     Value: !GetAtt 
