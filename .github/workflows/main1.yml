@@ -1,4 +1,11 @@
 name: Ci_Cd_Test1
+env:
+  EB_PACKAGE_S3_BUCKET_NAME : "cf-templates-p674dmzm3lbr-ap-northeast-1"
+  EB_APPLICATION_NAME       : "AWS_S3"
+  EB_ENVIRONMENT_NAME       : "Awss3-env"
+  DEPLOY_PACKAGE_NAME       : "aws_app_${{ github.sha }}.zip"
+  AWS_REGION_NAME           : "ap-northeast-1"
+
 # Controls when the action will run.
 on:
   # Allows you to run this workflow manually from the Actions tab
@@ -10,24 +17,23 @@ on:
 jobs:
   cfn-deployment:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Git clone
         uses: actions/checkout@v2
 
-      - name: Configure AWS credentials
-        id: creds
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ github.event.inputs.region }} 
+      - name: Create zip deployment package
+        run : zip -r ${{ env.DEPLOY_PACKAGE_NAME }} ./ -x *.git*
 
-      - name: Deploy S3 Buckets CloudFormation Stacks
-        id: s3-buckets
-        uses: aws-actions/aws-cloudformation-github-deploy@v1.0.3
+      - name: Configure my AWS Credentials
+        uses: aws-actions/configure-aws-credentials@1
         with:
-          name:  s3-buckets
-          template: awstest1.yml
-          parameter-overrides: >-
-            BucketName=${{ github.event.inputs.bucketName }}
-            
+          aws-access-key-id: ${{ secrets.YOUR_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.YOUR_SECRET_KEY }}
+          aws-region: ${{ env.AWS_REGION_NAME }}
+
+      - name: Copy Deployment package to S3 bucket
+        run : aws s3 cp ${{ env.DEPLOY_PACKAGE_NAME }} s3://${{ env.EB_PACKAGE_S3_BUCKET_NAME }}/
+        
+      - name: Print Happy Massage for CI finish
+        run : echo "CI Pipeline part finished successfully!"
