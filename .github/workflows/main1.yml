@@ -1,7 +1,7 @@
 name: Ci_Cd_Test1
 env:
   EB_PACKAGE_S3_BUCKET_NAME : "cf-templates-p674dmzm3lbr-ap-northeast-1"
-  DEPLOY_PACKAGE_NAME       : "aws_deploy.zip"
+  DEPLOY_PACKAGE_NAME       : "aws_deploy"
   AWS_REGION_NAME           : "ap-northeast-1"
 
 # Controls when the action will run.
@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Create zip deployment package
-        run : zip -r ${{ env.DEPLOY_PACKAGE_NAME }} ./ -x *.git*
+        run : ${{ env.DEPLOY_PACKAGE_NAME }} ./ -x *.git*
 
       - name: Configure my AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
