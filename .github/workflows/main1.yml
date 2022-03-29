@@ -40,12 +40,12 @@ jobs:
       - name: Deploy to EB
         uses: einaregilsson/beanstalk-deploy@v20
         with:
-          aws_access_key: ${{ secrets.YOUR_ACCESS_KEY }}
-          aws_secret_key: ${{ secrets.YOUR_SECRET_KEY }}
-          application_name: AWS_S3
-          environment_name: Awss3-env
-          region: ap-northeast-1
-          deployment_package: aws_app_74e93446b2104d39d306efd4955c3218531f8c53.zip
+          aws_access_key    : ${{ secrets.YOUR_ACCESS_KEY }}
+          aws_secret_key    : ${{ secrets.YOUR_SECRET_KEY }}
+          application_name  : ${{ env.EB_APPLICATION_NAME }}
+          environment_name  : ${{ env.EB_ENVIRONMENT_NAME }}
+          aws-region        : ${{ env.AWS_REGION_NAME }}
+          deployment_package: ${{ env.DEPLOY_PACKAGE_NAME }}
           
       - name: Print Happy Massage for CI finish
         run : echo "Deploy Stack finished successfully!"
