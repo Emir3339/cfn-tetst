@@ -36,3 +36,14 @@ jobs:
         
       - name: Print Happy Massage for CI finish
         run : echo "CI Pipeline part finished successfully!"
+        
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v20
+        with:
+          aws_access_key: ${{ secrets.YOUR_ACCESS_KEY }}
+          aws_secret_key: ${{ secrets.YOUR_SECRET_KEY }}
+          application_name: AWS_S3
+          environment_name: Awss3-env
+          version_label: 12345
+          region: ap-northeast-1
+          deployment_package: aws_app_${{ github.sha }}.zip
