@@ -40,4 +40,4 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v1
         with:
           name: cf-templates-p674dmzm3lbr-ap-northeast-1
-          template: aws_deploy.zip/awstest1.yaml
+          template: aws_deploy/awstest1.yaml
