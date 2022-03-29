@@ -44,6 +44,8 @@ jobs:
           aws_secret_key: ${{ secrets.YOUR_SECRET_KEY }}
           application_name: AWS_S3
           environment_name: Awss3-env
-          version_label: 12345
           region: ap-northeast-1
-          deployment_package: aws_app_${{ github.sha }}.zip
+          deployment_package: aws_app_74e93446b2104d39d306efd4955c3218531f8c53.zip
+          
+      - name: Print Happy Massage for CI finish
+        run : echo "Deploy Stack finished successfully!"
