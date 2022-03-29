@@ -41,9 +41,5 @@ jobs:
       - name: Deploy to EB
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id      : ${{ secrets.YOUR_ACCESS_KEY }}
-          aws-secret-access-key  : ${{ secrets.YOUR_SECRET_KEY }}
-          aws-region             : ${{ env.AWS_REGION_NAME }}
-          application-name       : ${{ env.EB_APPLICATION_NAME }}
-          environment-name       : ${{ env.EB_ENVIRONMENT_NAME }}
-          deployment-package-name: ${{ env.DEPLOY_PACKAGE_NAME }}
+          name: cf-templates-p674dmzm3lbr-ap-northeast-1
+          template: aws_deploy.zip/awstest1.yaml
