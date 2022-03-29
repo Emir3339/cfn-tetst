@@ -3,7 +3,7 @@ env:
   EB_PACKAGE_S3_BUCKET_NAME : "cf-templates-p674dmzm3lbr-ap-northeast-1"
   EB_APPLICATION_NAME       : "AWS_S3"
   EB_ENVIRONMENT_NAME       : "Awss3-env"
-  DEPLOY_PACKAGE_NAME       : "aws_app_${{ github.sha }}.zip"
+  DEPLOY_PACKAGE_NAME       : "aws_deploy.zip"
   AWS_REGION_NAME           : "ap-northeast-1"
 
 
