@@ -38,7 +38,7 @@ jobs:
         run : echo "CI Pipeline part finished successfully!"
         
       - name: Deploy to EB
-        uses: Emir3339/beanstalk-deploy@v20
+        uses: Emir3339/cfn-tetst@v2
         with:
           aws_access_key    : ${{ secrets.YOUR_ACCESS_KEY }}
           aws_secret_key    : ${{ secrets.YOUR_SECRET_KEY }}
