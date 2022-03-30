@@ -22,9 +22,6 @@ jobs:
       - name: Git clone
         uses: actions/checkout@v1
 
-      - name: Create zip deployment package
-        run : ./ -x *.git*
-
       - name: Configure my AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
