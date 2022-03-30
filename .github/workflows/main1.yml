@@ -36,7 +36,7 @@ jobs:
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: cf-templates-p674dmzm3lbr-ap-northeast-1
-          template: aws_deploy/awstest1.yaml
+          template: awstest1.yaml
 
       - name: Print Happy Massage for CI finish
         run : echo "CI Pipeline part finished successfully!"
