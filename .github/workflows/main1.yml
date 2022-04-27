@@ -25,8 +25,8 @@ jobs:
       - name: Configure my AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id    : ${{ secrets.YOUR_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.YOUR_SECRET_KEY }}
+          aws-access-key-id    : ${{ secrets.USER_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.USER_SECRET_KEY }}
           aws-region           : ${{ env.AWS_REGION_NAME }}
 
       - name: Copy Deployment package to S3 bucket
@@ -36,7 +36,18 @@ jobs:
         uses: aws-actions/aws-cloudformation-github-deploy@v1
         with:
           name: cf-templates-p674dmzm3lbr-ap-northeast-1
-          template: awstest1.yaml
+          template: aws-test.yaml
+          
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
 
+      - name: Install dependencies
+        run: |
+          apt update
+          python -m pip install --upgrade pip
+          pip install molecule yamllint ansible-lint docker
+          
       - name: Print Happy Massage for CI finish
         run : echo "CI Pipeline part finished successfully!"
